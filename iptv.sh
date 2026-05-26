@@ -1,26 +1,34 @@
 #!/bin/bash
+set -euo pipefail
+
+# 创建输出目录
 mkdir -p output
 
-# 源地址（稳定开源接口）
-URL="https://raw.githubusercontent.com/iptv-sources/iptv-json/main/source.json"
+# 下载源（用更稳定的公共源）
+echo "正在下载直播源..."
+curl -sSL "https://raw.githubusercontent.com/imyuji/iptv/main/tv.txt" -o tv.txt
 
-# 下载源
-curl -sSL $URL -o source.json
+# 1. 处理IPv4源
+echo "正在分类IPv4源..."
+grep -E -v "\[|\.ipv6|ipv6\." tv.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' > output/ipv4.m3u
+sed -i '1i #EXTM3U' output/ipv4.m3u
 
-# 转换为 m3u 格式
-jq -r '.channels[] | .name + "," + .url' source.json > all.txt
+# 2. 处理IPv6源
+echo "正在分类IPv6源..."
+grep -E "\[|\.ipv6|ipv6\." tv.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' > output/ipv6.m3u
+sed -i '1i #EXTM3U' output/ipv6.m3u
 
-# 分类：IPv6
-grep -E "://\[|\.ipv6|ipv6\." all.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' > output/ipv6.m3u
+# 3. 处理港澳台源
+echo "正在分类港澳台源..."
+grep -E "香港|港|澳门|澳|台湾|台|TVB|凤凰|翡翠" tv.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' > output/hk_tw.m3u
+sed -i '1i #EXTM3U' output/hk_tw.m3u
 
-# 分类：IPv4
-grep -v -E "://\[|\.ipv6|ipv6\." all.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' > output/ipv4.m3u
+# 4. 生成通用源
+echo "生成通用源..."
+awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' tv.txt > output/live.m3u
+sed -i '1i #EXTM3U' output/live.m3u
 
-# 分类：港澳台
-grep -E "香港|港|澳门|澳|台湾|台|TVB|凤凰|星空|翡翠|now|hktv|tw|hk" all.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' > output/hktw.m3u
+# 复制到根目录，方便直接访问
+cp output/*.m3u ./
 
-# 完整源
-awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' all.txt > output/all.m3u
-
-# 头部格式
-sed -i '1i #EXTM3U' output/*.m3u
+echo "✅ 直播源生成完成！"
