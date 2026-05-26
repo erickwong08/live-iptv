@@ -3,7 +3,7 @@ name: 自动更新IPTV源
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'  # 每天自动更新
+    - cron: '0 0 * * *'
 
 jobs:
   build:
@@ -12,38 +12,36 @@ jobs:
       - name: 拉取代码
         uses: actions/checkout@v5
 
-      - name: 安装依赖
-        run: sudo apt-get update && sudo apt-get install -y curl jq
+      - name: 安装curl
+        run: sudo apt-get update && sudo apt-get install -y curl
 
-      - name: 下载并处理稳定直播源
+      - name: 直接下载并生成可用源
         run: |
-          # 1. 下载长期稳定的公开源（这个地址亲测有效）
-          curl -sSL "https://ghproxy.com/https://raw.githubusercontent.com/iptv-org/iptv/master/streams/****3u" -o raw.m3u
+          # 下载稳定的通用源
+          curl -sSL "https://raw.githubusercontent.com/Guovin/TV/master/iptv/iptv.txt" -o iptv.txt
 
-          # 2. 生成 IPv4 源（过滤掉 IPv6 地址）
-          grep -A2 -B1 -E "^#EXTINF|^http" raw.m3u | grep -A2 -B1 -v "\[.*\]" > ipv4.m3u
+          # 生成IPv4源（只保留非IPv6地址）
+          cat > ipv4.m3u <<EOF
+#EXTM3U
+$(grep -v -E "\[|ipv6" iptv.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}')
+EOF
 
-          # 3. 生成 IPv6 源（只保留 IPv6 地址）
-          grep -A2 -B1 -E "^#EXTINF|^http" raw.m3u | grep -A2 -B1 "\[.*\]" > ipv6.m3u
+          # 生成港澳台源
+          cat > hk_tw.m3u <<EOF
+#EXTM3U
+$(grep -E "香港|澳门|台湾|TVB|凤凰" iptv.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}')
+EOF
 
-          # 4. 生成港澳台源
-          curl -sSL "https://ghproxy.com/https://raw.githubusercontent.com/iptv-org/iptv/master/streams/hk.m3u" -o hk_raw.m3u
-          curl -sSL "https://ghproxy.com/https://raw.githubusercontent.com/iptv-org/iptv/master/streams/tw.m3u" -o tw_raw.m3u
-          cat hk_raw.m3u tw_raw.m3u > hk_tw.m3u
+          # 生成全量源
+          cat > live.m3u <<EOF
+#EXTM3U
+$(awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' iptv.txt)
+EOF
 
-          # 5. 合并成通用全量源
-          cat ipv4.m3u ipv6.m3u hk_tw.m3u | grep -v "^--$" | sort -u > live.m3u
-
-          # 6. 给每个文件加上标准 m3u 头部
-          sed -i '1i #EXTM3U' ipv4.m3u
-          sed -i '1i #EXTM3U' ipv6.m3u
-          sed -i '1i #EXTM3U' hk_tw.m3u
-          sed -i '1i #EXTM3U' live.m3u
-
-      - name: 提交更新
+      - name: 提交文件
         run: |
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
           git add *.m3u
-          git commit -m "更新IPTV源 $(date +'%Y-%m-%d %H:%M:%S')" || echo "无更新内容"
+          git commit -m "更新IPTV源 $(date +'%Y-%m-%d %H:%M:%S')" || echo "无新内容"
           git push
