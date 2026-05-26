@@ -3,7 +3,7 @@ name: 自动更新IPTV源
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * *'  # 每天自动更新
 
 jobs:
   build:
@@ -13,27 +13,31 @@ jobs:
         uses: actions/checkout@v5
 
       - name: 安装依赖
-        run: sudo apt-get update && sudo apt-get install -y curl
+        run: sudo apt-get update && sudo apt-get install -y curl jq
 
-      - name: 直接下载现成可用的源并分类
+      - name: 下载并处理稳定直播源
         run: |
-          # 下载稳定源
-          curl -sSL "https://raw.githubusercontent.com/Guovin/TV/master/iptv/iptv.txt" -o iptv.txt
-          
-          # 1. IPv4 源（去掉IPv6地址）
-          grep -v -E "\[|ipv6" iptv.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' > ipv4.m3u
+          # 1. 下载长期稳定的公开源（这个地址亲测有效）
+          curl -sSL "https://ghproxy.com/https://raw.githubusercontent.com/iptv-org/iptv/master/streams/****3u" -o raw.m3u
+
+          # 2. 生成 IPv4 源（过滤掉 IPv6 地址）
+          grep -A2 -B1 -E "^#EXTINF|^http" raw.m3u | grep -A2 -B1 -v "\[.*\]" > ipv4.m3u
+
+          # 3. 生成 IPv6 源（只保留 IPv6 地址）
+          grep -A2 -B1 -E "^#EXTINF|^http" raw.m3u | grep -A2 -B1 "\[.*\]" > ipv6.m3u
+
+          # 4. 生成港澳台源
+          curl -sSL "https://ghproxy.com/https://raw.githubusercontent.com/iptv-org/iptv/master/streams/hk.m3u" -o hk_raw.m3u
+          curl -sSL "https://ghproxy.com/https://raw.githubusercontent.com/iptv-org/iptv/master/streams/tw.m3u" -o tw_raw.m3u
+          cat hk_raw.m3u tw_raw.m3u > hk_tw.m3u
+
+          # 5. 合并成通用全量源
+          cat ipv4.m3u ipv6.m3u hk_tw.m3u | grep -v "^--$" | sort -u > live.m3u
+
+          # 6. 给每个文件加上标准 m3u 头部
           sed -i '1i #EXTM3U' ipv4.m3u
-          
-          # 2. IPv6 源（只保留IPv6地址）
-          grep -E "\[|ipv6" iptv.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' > ipv6.m3u
           sed -i '1i #EXTM3U' ipv6.m3u
-          
-          # 3. 港澳台源
-          grep -E "香港|澳门|台湾|TVB|凤凰" iptv.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' > hk_tw.m3u
           sed -i '1i #EXTM3U' hk_tw.m3u
-          
-          # 4. 全量源
-          awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' iptv.txt > live.m3u
           sed -i '1i #EXTM3U' live.m3u
 
       - name: 提交更新
