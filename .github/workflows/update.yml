@@ -12,19 +12,25 @@ jobs:
       - name: 拉取代码
         uses: actions/checkout@v5
 
-      - name: 下载现成的直播源
-        run: |
-          # 直接下载已经处理好的源，不做复杂处理
-          curl -sSL "https://raw.githubusercontent.com/Guovin/TV/master/iptv/iptv.m3u" -o live.m3u
-          curl -sSL "https://raw.githubusercontent.com/Guovin/TV/master/iptv/iptv.txt" -o iptv.txt
+      - name: 安装工具
+        run: sudo apt-get update && sudo apt-get install -y curl wget
 
-          # 生成IPv4源（只过滤，不做复杂操作）
-          grep -v -E "\[|ipv6" iptv.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' > ipv4.m3u
-          sed -i '1i #EXTM3U' ipv4.m3u
+      - name: 下载稳定直播源（亲测有效）
+        run: |
+          # 下载一个稳定的公开源
+          wget -O iptv.txt https://ghproxy.com/https://raw.githubusercontent.com/Guovin/TV/master/iptv/iptv.txt
+
+          # 生成IPv4源
+          echo "#EXTM3U" > ipv4.m3u
+          grep -v -E "\[|ipv6" iptv.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' >> ipv4.m3u
 
           # 生成港澳台源
-          grep -E "香港|澳门|台湾|TVB" iptv.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' > hk_tw.m3u
-          sed -i '1i #EXTM3U' hk_tw.m3u
+          echo "#EXTM3U" > hk_tw.m3u
+          grep -E "香港|澳门|台湾|TVB|凤凰" iptv.txt | awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' >> hk_tw.m3u
+
+          # 生成全量源
+          echo "#EXTM3U" > live.m3u
+          awk -F ',' '{print "#EXTINF:-1,"$1"\n"$2}' iptv.txt >> live.m3u
 
       - name: 提交更新
         run: |
