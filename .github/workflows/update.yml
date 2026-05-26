@@ -10,32 +10,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 拉取代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5  # 修复Node.js警告
 
-      - name: 安装环境
-        run: sudo apt-get install -y curl jq
-
-      - name: 采集+分类+测速源
+      - name: 安装依赖
         run: |
-          # 创建目录
-          mkdir -p output
-          
-          # 1. 拉取开源优质源（稳定、无广告）
-          curl -sSL https://raw.githubusercontent.com/iptv-sources/iptv-json/main/source.json -o sources.json
-          
-          # 2. 自动分类：IPv4 / IPv6 / 港澳台
-          curl -sSL https://raw.githubusercontent.com/yuanzl77/IPTV/main/iptv.sh | bash
-          
-          # 3. 生成最终播放文件
-          cat output/ipv6.m3u > ipv6.m3u
-          cat output/ipv4.m3u > ipv4.m3u
-          cat output/hktw.m3u > hk_tw.m3u
-          cat output/all.m3u > live.m3u
+          sudo apt-get update
+          sudo apt-get install -y curl jq
+
+      - name: 赋予脚本执行权限
+        run: chmod +x ./iptv.sh
+
+      - name: 运行采集脚本
+        run: ./iptv.sh
 
       - name: 提交更新
         run: |
-          git config --global user.name "github-actions"
-          git config --global user.email "actions@github.com"
+          git config --global user.name "${{ github.actor }}"
+          git config --global user.email "${{ github.actor }}@users.noreply.github.com"
           git add *.m3u
-          git commit -m "自动更新直播源 $(date '+%Y-%m-%d %H:%M:%S')"
+          git add output/*.m3u 2>/dev/null || true
+          git commit -m "自动更新直播源 $(date '+%Y-%m-%d %H:%M:%S')" || echo "无更新内容"
           git push
